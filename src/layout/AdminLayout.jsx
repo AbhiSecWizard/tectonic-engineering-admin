@@ -40,6 +40,7 @@ const AdminLayout = () => {
         {/* Current Route */}
             <Routes>
       <Route path="/" element={<Dashboard/>}/>
+      <Route path="/admin" element={<Dashboard/>}/>
       <Route path="/admin/blog" element={<Blog/>}/>
       <Route path="/admin/clients" element={<Clients/>}/>
 

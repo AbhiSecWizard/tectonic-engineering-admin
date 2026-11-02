@@ -13,7 +13,7 @@ import {
 } from "react-icons/fa6";
 
 const menuItems = [
-  { label: "Dashboard", to: "/admin", icon: FaChartPie, end: true },
+  { label: "Dashboard", to: "/", icon: FaChartPie, end: true },
 
   { label: "Clients", to: "/admin/clients", icon: FaBuilding },
   { label: "Projects", to: "/admin/projects", icon: FaFolderOpen },
