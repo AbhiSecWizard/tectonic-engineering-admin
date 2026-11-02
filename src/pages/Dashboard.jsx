@@ -478,7 +478,7 @@ const Dashboard = () => {
       icon: FaNewspaper,
       color: "bg-indigo-50 text-indigo-700",
       subtitle: `${counts.publishedBlogs} published`,
-      link: "/admin/blogs",
+      link: "/admin/blog",
     },
   ];
 
