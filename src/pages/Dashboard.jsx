@@ -584,7 +584,7 @@ const Dashboard = () => {
           subtitle="Track your blog publishing progress."
           action={
             <Link
-              to="/admin/blogs"
+              to="/admin/blog"
               className="flex items-center gap-2 text-xs font-semibold text-primary hover:text-secondary"
             >
               Manage Blogs <FaArrowRight />
