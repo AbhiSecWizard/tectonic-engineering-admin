@@ -14,7 +14,7 @@ import {
 
 const menuItems = [
   { label: "Dashboard", to: "/admin", icon: FaChartPie, end: true },
-  { label: "Enquiries", to: "/admin/enquiries", icon: FaEnvelope },
+
   { label: "Clients", to: "/admin/clients", icon: FaBuilding },
   { label: "Projects", to: "/admin/projects", icon: FaFolderOpen },
   { label: "Blog", to: "/admin/blog", icon: FaFileLines },

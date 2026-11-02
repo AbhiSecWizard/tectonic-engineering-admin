@@ -5,7 +5,6 @@ import Sidebar from "./Sidebar";
 import Blog from "../pages/Blog";
 import Dashboard from "../pages/Dashboard";
 import Clients from "../pages/Clients";
-import Enquiries from "../pages/Enquiries";
 import Projects from "../pages/Projects";
 import Gallery from "../pages/Gallery";
 import Team from "../pages/Team";
@@ -43,7 +42,7 @@ const AdminLayout = () => {
       <Route path="/admin" element={<Dashboard/>}/>
       <Route path="/admin/blog" element={<Blog/>}/>
       <Route path="/admin/clients" element={<Clients/>}/>
-      <Route path="/admin/enquiries" element={<Enquiries/>}/>
+
       <Route path="/admin/projects" element={<Projects/>}/>
       <Route path="/admin/gallery" element={<Gallery/>}/>
       <Route path="/admin/team" element={<Team/>}/>
