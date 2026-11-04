@@ -1,4 +1,3 @@
-// Temporary page used until the real page is built
 const PlaceholderPage = ({ title }) => {
   return (
     <div>
@@ -7,5 +6,5 @@ const PlaceholderPage = ({ title }) => {
     </div>
   );
 };
-
+  
 export default PlaceholderPage;

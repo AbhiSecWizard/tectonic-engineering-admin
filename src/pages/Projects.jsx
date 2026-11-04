@@ -121,7 +121,7 @@ const revokeUrl = (url) => {
 };
 
 const apiRequest = async (endpoint, options = {}) => {
-  const response = await fetch(`${API_URL}${endpoint}`, options);
+  const response = await fetch(`${API_URL}${endpoint}`,{...options, credentials: "include"});
   const result = await response.json().catch(() => ({}));
 
   if (!response.ok) {

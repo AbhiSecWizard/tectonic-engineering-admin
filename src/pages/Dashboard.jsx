@@ -64,14 +64,27 @@ const extractArray = (result) => {
   return [];
 };
 
+
 const fetchResource = async (url) => {
-  const response = await fetch(url);
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
 
-  if (!response.ok) {
-    throw new Error(`API Error: ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.status}`);
+    }
+
+    return await response.json();
+
+  } catch (error) {
+    console.error("Fetch error:", error);
+    throw error;
   }
-
-  return response.json();
 };
 
 const fetchBlogs = async () => {
@@ -363,7 +376,7 @@ const Dashboard = () => {
         (sum, records) => {
           const count = records.filter((item) => {
             if (!item.createdAt) return false;
-
+                                                
             const created = new Date(item.createdAt);
 
             return (

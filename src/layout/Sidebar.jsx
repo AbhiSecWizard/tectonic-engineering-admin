@@ -1,7 +1,9 @@
-import { NavLink } from "react-router-dom";
+
+import { NavLink, useNavigate } from "react-router-dom";
+import { useState } from "react";
+
 import {
   FaChartPie,
-  FaEnvelope,
   FaBuilding,
   FaFolderOpen,
   FaFileLines,
@@ -12,9 +14,10 @@ import {
   FaXmark,
 } from "react-icons/fa6";
 
-const menuItems = [
-  { label: "Dashboard", to: "/", icon: FaChartPie, end: true },
+const API_URL = import.meta.env.VITE_API_URL;
 
+const menuItems = [
+  { label: "Dashboard", to: "/admin", icon: FaChartPie, end: true },
   { label: "Clients", to: "/admin/clients", icon: FaBuilding },
   { label: "Projects", to: "/admin/projects", icon: FaFolderOpen },
   { label: "Blog", to: "/admin/blog", icon: FaFileLines },
@@ -38,8 +41,37 @@ const Sidebar = ({
   isOpen = false,
   onClose = () => {},
   admin = { name: "Admin", email: "" },
-  onLogout = () => {},
 }) => {
+  const navigate = useNavigate();
+
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  // LOGOUT FUNCTION
+  const handleLogout = async () => {
+    try {
+      setLoggingOut(true);
+
+      const response = await fetch(`${API_URL}/api/admin/logout`, {
+        method: "POST",
+        credentials: "include",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Logout failed");
+      }
+
+      navigate("/admin/login", { replace: true });
+
+    } catch (error) {
+      console.error("Logout Error:", error);
+      alert(error.message || "Unable to logout");
+    } finally {
+      setLoggingOut(false);
+    }
+  };
+
   return (
     <>
       {/* Mobile Backdrop */}
@@ -71,7 +103,6 @@ const Sidebar = ({
             </span>
           </div>
 
-          {/* Close Button */}
           <button
             onClick={onClose}
             aria-label="Close menu"
@@ -115,7 +146,6 @@ const Sidebar = ({
                             : "text-slate-400"
                         }
                       />
-
                       <span>{label}</span>
                     </>
                   )}
@@ -128,12 +158,10 @@ const Sidebar = ({
         {/* Admin Profile */}
         <div className="border-t border-white/10 p-3">
           <div className="flex items-center gap-3 rounded-lg bg-white/5 p-3">
-            {/* Avatar */}
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-secondary text-sm font-bold text-white">
               {getInitials(admin.name)}
             </span>
 
-            {/* Admin Details */}
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-white">
                 {admin.name}
@@ -148,10 +176,11 @@ const Sidebar = ({
 
             {/* Logout */}
             <button
-              onClick={onLogout}
+              onClick={handleLogout}
+              disabled={loggingOut}
               aria-label="Log out"
               title="Log out"
-              className="rounded-md p-2 text-slate-300 transition hover:bg-white/10 hover:text-white"
+              className="rounded-md p-2 text-slate-300 transition hover:bg-white/10 hover:text-white disabled:opacity-50"
             >
               <FaRightFromBracket size={18} />
             </button>

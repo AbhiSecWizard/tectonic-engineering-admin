@@ -36,7 +36,7 @@ const EMPTY_FORM = {
 };
 
 async function apiRequest(path, options = {}) {
-  const response = await fetch(`${API_URL}${path}`, options);
+  const response = await fetch(`${API_URL}${path}`,{...options, credentials: "include"});
   const result = await response.json().catch(() => ({}));
 
   if (!response.ok) {
