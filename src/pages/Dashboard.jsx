@@ -145,7 +145,7 @@ const StatCard = ({
   link,
 }) => {
   const content = (
-    <div className="group h-full rounded-xl border border-border bg-surface p-5 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-md">
+    <div className="group h-full rounded border border-border bg-surface p-5 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-md">
 
       <div className="flex items-center justify-between gap-3">
 
@@ -154,7 +154,7 @@ const StatCard = ({
         </p>
 
         <div
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${color}`}
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded ${color}`}
         >
           <Icon className="text-lg" />
         </div>
@@ -552,7 +552,7 @@ const Dashboard = () => {
       ========================================== */}
 
       {errors.length > 0 && (
-        <div className="mb-6 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+        <div className="mb-6 flex items-start gap-3 rounded border border-amber-200 bg-amber-50 p-4">
 
           <FaExclamationTriangle className="mt-0.5 shrink-0 text-amber-600" />
 
@@ -632,7 +632,7 @@ const Dashboard = () => {
           ].map((item) => (
             <div
               key={item.title}
-              className="flex items-center justify-between rounded-xl border border-border bg-surface p-5 shadow-sm"
+              className="flex items-center justify-between rounded border border-border bg-surface p-5 shadow-sm"
             >
               <div>
                 <p className="text-sm text-muted">
@@ -644,7 +644,7 @@ const Dashboard = () => {
                 </h3>
               </div>
 
-              <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${item.background} ${item.color}`}>
+              <div className={`flex h-12 w-12 items-center justify-center rounded ${item.background} ${item.color}`}>
                 <item.icon className="text-xl" />
               </div>
             </div>
@@ -662,7 +662,7 @@ const Dashboard = () => {
 
         {/* MONTHLY ACTIVITY */}
 
-        <section className="rounded-xl border border-border bg-surface p-5 shadow-sm xl:col-span-2">
+        <section className="rounded border border-border bg-surface p-5 shadow-sm xl:col-span-2">
 
           <SectionHeader
             title="Monthly Activity"
@@ -716,7 +716,7 @@ const Dashboard = () => {
 
         {/* QUICK ACTIONS */}
 
-        <section className="rounded-xl border border-border bg-surface p-5 shadow-sm">
+        <section className="rounded border border-border bg-surface p-5 shadow-sm">
 
           <SectionHeader
             title="Quick Actions"
@@ -761,7 +761,7 @@ const Dashboard = () => {
           RECENT ACTIVITY
       ========================================== */}
 
-      <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+      <section className="overflow-hidden rounded border border-border bg-surface shadow-sm">
 
         <div className="flex flex-col justify-between gap-3 border-b border-border p-5 sm:flex-row sm:items-center">
 

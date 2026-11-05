@@ -250,7 +250,7 @@ const ProjectViewModal = ({ project, onClose, onEdit }) => {
             <img
               src={project.coverImage.url}
               alt={project.name}
-              className="h-64 w-full rounded-xl object-cover"
+              className="h-64 w-full rounded object-cover"
             />
           )}
 
@@ -840,7 +840,7 @@ const Projects = () => {
         {statCards.map((item) => (
           <div
             key={item.title}
-            className="rounded-xl border border-border bg-surface p-5 shadow-sm"
+            className="rounded border border-border bg-surface p-5 shadow-sm"
           >
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium text-muted">{item.title}</p>
@@ -856,7 +856,7 @@ const Projects = () => {
       </div>
 
       {/* PROJECT TABLE */}
-      <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+      <div className="overflow-hidden rounded border border-border bg-surface shadow-sm">
         {/* FILTERS */}
         <div className="flex flex-col gap-3 border-b border-border p-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -1348,7 +1348,7 @@ const Projects = () => {
                     <button
                       type="button"
                       onClick={() => coverInputRef.current?.click()}
-                      className="flex min-h-48 w-full cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-background p-5 text-center transition hover:border-primary"
+                      className="flex min-h-48 w-full cursor-pointer flex-col items-center justify-center rounded border-2 border-dashed border-border bg-background p-5 text-center transition hover:border-primary"
                     >
                       {showCoverPreview ? (
                         <img
@@ -1471,7 +1471,7 @@ const Projects = () => {
               <section>
                 <SectionTitle>10. Website Settings</SectionTitle>
 
-                <label className="flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-border bg-background p-4">
+                <label className="flex cursor-pointer items-center justify-between gap-4 rounded border border-border bg-background p-4">
                   <div>
                     <p className="font-semibold text-heading">
                       Show project on website

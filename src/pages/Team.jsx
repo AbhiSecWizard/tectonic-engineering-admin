@@ -13,10 +13,14 @@ import {
   FaTimes,
   FaSpinner,
   FaCloudUploadAlt,
-  FaEnvelope,
   FaCheckCircle,
   FaExclamationCircle,
+  FaEnvelope,
 } from "react-icons/fa";
+
+// ==========================================
+// CONFIGURATION
+// ==========================================
 
 const API_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:3000"
@@ -24,25 +28,69 @@ const API_URL = (
 
 const TEAM_API = `${API_URL}/api/team`;
 
-const initialForm = {
+const MAX_PHOTO_SIZE = 5 * 1024 * 1024;
+
+// ==========================================
+// INITIAL FORM
+// ==========================================
+
+const createInitialForm = () => ({
   name: "",
   workEmail: "",
   designation: "",
   education: "",
   note: "",
+});
+
+// ==========================================
+// API HELPER
+// ==========================================
+
+const apiRequest = async (url, options = {}) => {
+  const response = await fetch(url, {
+    credentials: "include",
+    ...options,
+  });
+
+  let result = {};
+
+  try {
+    result = await response.json();
+  } catch {
+    result = {};
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      result.message || `Request failed (${response.status})`
+    );
+  }
+
+  return result;
 };
 
+// ==========================================
+// MAIN COMPONENT
+// ==========================================
+
 const Team = () => {
+  // ----------------------------------------
+  // STATES
+  // ----------------------------------------
+
   const [team, setTeam] = useState([]);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   const [search, setSearch] = useState("");
+
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [viewMember, setViewMember] = useState(null);
 
-  const [formData, setFormData] = useState(initialForm);
+  const [formData, setFormData] = useState(createInitialForm);
   const [photo, setPhoto] = useState(null);
   const [preview, setPreview] = useState("");
 
@@ -54,24 +102,33 @@ const Team = () => {
   const fileInputRef = useRef(null);
   const previewUrlRef = useRef("");
 
+  // ----------------------------------------
+  // NOTIFICATION
+  // ----------------------------------------
+
+  const showNotification = (type, text) => {
+    setMessage({ type, text });
+  };
+
+  const clearNotification = () => {
+    setMessage({ type: "", text: "" });
+  };
+
+  // ----------------------------------------
   // FETCH TEAM MEMBERS
+  // ----------------------------------------
+
   const fetchTeam = async () => {
     try {
       setLoading(true);
 
-      const response = await fetch(TEAM_API);
-      const result = await response.json();
+      const result = await apiRequest(TEAM_API);
 
-      if (!response.ok) {
-        throw new Error(result.message || "Failed to fetch team");
-      }
-
-      setTeam(result.data || []);
+      setTeam(
+        Array.isArray(result.data) ? result.data : []
+      );
     } catch (error) {
-      setMessage({
-        type: "error",
-        text: error.message,
-      });
+      showNotification("error", error.message);
     } finally {
       setLoading(false);
     }
@@ -81,7 +138,10 @@ const Team = () => {
     fetchTeam();
   }, []);
 
-  // CLEAN PREVIEW URL
+  // ----------------------------------------
+  // PREVIEW URL CLEANUP
+  // ----------------------------------------
+
   const clearPreview = () => {
     if (previewUrlRef.current) {
       URL.revokeObjectURL(previewUrlRef.current);
@@ -89,7 +149,16 @@ const Team = () => {
     }
   };
 
+  useEffect(() => {
+    return () => {
+      clearPreview();
+    };
+  }, []);
+
+  // ----------------------------------------
   // FORM INPUT CHANGE
+  // ----------------------------------------
+
   const handleChange = (e) => {
     const { name, value } = e.target;
 
@@ -99,11 +168,14 @@ const Team = () => {
     }));
   };
 
+  // ----------------------------------------
   // RESET FORM
+  // ----------------------------------------
+
   const resetForm = () => {
     clearPreview();
 
-    setFormData(initialForm);
+    setFormData(createInitialForm());
     setPhoto(null);
     setPreview("");
     setEditingId(null);
@@ -114,14 +186,20 @@ const Team = () => {
     }
   };
 
+  // ----------------------------------------
   // OPEN CREATE FORM
+  // ----------------------------------------
+
   const handleAddNew = () => {
     resetForm();
-    setMessage({ type: "", text: "" });
+    clearNotification();
     setShowForm(true);
   };
 
+  // ----------------------------------------
   // OPEN EDIT FORM
+  // ----------------------------------------
+
   const handleEdit = (member) => {
     clearPreview();
 
@@ -137,9 +215,15 @@ const Team = () => {
 
     setPhoto(null);
     setPreview(member.photo?.url || "");
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+
     setShowForm(true);
     setViewMember(null);
-    setMessage({ type: "", text: "" });
+
+    clearNotification();
 
     window.scrollTo({
       top: 0,
@@ -147,26 +231,31 @@ const Team = () => {
     });
   };
 
-  // PHOTO CHANGE
+  // ----------------------------------------
+  // PHOTO VALIDATION & PREVIEW
+  // ----------------------------------------
+
   const handlePhotoChange = (e) => {
     const file = e.target.files?.[0];
 
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      setMessage({
-        type: "error",
-        text: "Please select a valid image.",
-      });
+      showNotification(
+        "error",
+        "Please select a valid image file."
+      );
+
       e.target.value = "";
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      setMessage({
-        type: "error",
-        text: "Photo size should not exceed 5MB.",
-      });
+    if (file.size > MAX_PHOTO_SIZE) {
+      showNotification(
+        "error",
+        "Photo size should not exceed 5MB."
+      );
+
       e.target.value = "";
       return;
     }
@@ -179,9 +268,14 @@ const Team = () => {
 
     setPhoto(file);
     setPreview(imageUrl);
+
+    clearNotification();
   };
 
-  // CREATE / UPDATE
+  // ----------------------------------------
+  // CREATE / UPDATE TEAM MEMBER
+  // ----------------------------------------
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -190,24 +284,26 @@ const Team = () => {
       !formData.workEmail.trim() ||
       !formData.designation.trim()
     ) {
-      setMessage({
-        type: "error",
-        text: "Name, work email and designation are required.",
-      });
+      showNotification(
+        "error",
+        "Name, work email and designation are required."
+      );
+
       return;
     }
 
     if (!editingId && !photo) {
-      setMessage({
-        type: "error",
-        text: "Please upload a team member photo.",
-      });
+      showNotification(
+        "error",
+        "Please upload a team member photo."
+      );
+
       return;
     }
 
     try {
       setSaving(true);
-      setMessage({ type: "", text: "" });
+      clearNotification();
 
       const data = new FormData();
 
@@ -223,53 +319,50 @@ const Team = () => {
         ? `${TEAM_API}/${editingId}`
         : TEAM_API;
 
-      const response = await fetch(url, {
+      const result = await apiRequest(url, {
         method: editingId ? "PUT" : "POST",
         body: data,
       });
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.message || "Something went wrong");
-      }
-
       resetForm();
+
       await fetchTeam();
 
-      setMessage({
-        type: "success",
-        text: result.message,
-      });
-
+      showNotification(
+        "success",
+        result.message ||
+          (editingId
+            ? "Team member updated successfully."
+            : "Team member created successfully.")
+      );
     } catch (error) {
-      setMessage({
-        type: "error",
-        text: error.message,
-      });
+      showNotification("error", error.message);
     } finally {
       setSaving(false);
     }
   };
 
-  // DELETE MEMBER
+  // ----------------------------------------
+  // DELETE TEAM MEMBER
+  // ----------------------------------------
+
   const handleDelete = async (id) => {
-    const confirmDelete = window.confirm(
+    const confirmed = window.confirm(
       "Are you sure you want to delete this team member?"
     );
 
-    if (!confirmDelete) return;
+    if (!confirmed) return;
 
     try {
-      const response = await fetch(`${TEAM_API}/${id}`, {
-        method: "DELETE",
-      });
+      setDeletingId(id);
+      clearNotification();
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.message || "Delete failed");
-      }
+      const result = await apiRequest(
+        `${TEAM_API}/${id}`,
+        {
+          method: "DELETE",
+        }
+      );
 
       setTeam((prev) =>
         prev.filter((member) => member._id !== id)
@@ -279,22 +372,23 @@ const Team = () => {
         setViewMember(null);
       }
 
-      setMessage({
-        type: "success",
-        text: result.message,
-      });
-
+      showNotification(
+        "success",
+        result.message || "Team member deleted successfully."
+      );
     } catch (error) {
-      setMessage({
-        type: "error",
-        text: error.message,
-      });
+      showNotification("error", error.message);
+    } finally {
+      setDeletingId(null);
     }
   };
 
+  // ----------------------------------------
   // SEARCH FILTER
+  // ----------------------------------------
+
   const filteredTeam = team.filter((member) => {
-    const query = search.toLowerCase().trim();
+    const query = search.trim().toLowerCase();
 
     return [
       member.name,
@@ -306,7 +400,10 @@ const Team = () => {
     );
   });
 
+  // ----------------------------------------
   // STATISTICS
+  // ----------------------------------------
+
   const stats = [
     {
       title: "Total Members",
@@ -316,32 +413,44 @@ const Team = () => {
     },
     {
       title: "With Education",
-      value: team.filter((m) => m.education?.trim()).length,
+      value: team.filter(
+        (member) => member.education?.trim()
+      ).length,
       icon: <FaGraduationCap />,
       color: "text-green-600",
     },
     {
       title: "With Introduction",
-      value: team.filter((m) => m.note?.trim()).length,
+      value: team.filter(
+        (member) => member.note?.trim()
+      ).length,
       icon: <FaUserTie />,
       color: "text-secondary",
     },
     {
       title: "Designations",
       value: new Set(
-        team.map((m) => m.designation?.trim().toLowerCase()).filter(Boolean)
+        team
+          .map((member) =>
+            member.designation?.trim().toLowerCase()
+          )
+          .filter(Boolean)
       ).size,
       icon: <FaBriefcase />,
       color: "text-primary",
     },
   ];
 
+  // ========================================
+  // UI
+  // ========================================
+
   return (
     <div className="min-h-screen bg-background p-4 sm:p-6 lg:p-7">
 
       {/* HEADER */}
-      <div className="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
 
+      <div className="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
         <div>
           <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-secondary">
             CRM MANAGEMENT
@@ -357,16 +466,17 @@ const Team = () => {
         </div>
 
         <button
+          type="button"
           onClick={handleAddNew}
           className="flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-footer"
         >
           <FaPlus />
           Add New Member
         </button>
-
       </div>
 
       {/* NOTIFICATION */}
+
       {message.text && (
         <div
           className={`mb-5 flex items-center justify-between rounded-lg border p-3 ${
@@ -381,11 +491,14 @@ const Team = () => {
             ) : (
               <FaExclamationCircle />
             )}
-            {message.text}
+
+            <span>{message.text}</span>
           </div>
 
           <button
-            onClick={() => setMessage({ type: "", text: "" })}
+            type="button"
+            onClick={clearNotification}
+            aria-label="Close notification"
           >
             <FaTimes />
           </button>
@@ -393,12 +506,12 @@ const Team = () => {
       )}
 
       {/* STATISTICS */}
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
 
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {stats.map((stat) => (
           <div
             key={stat.title}
-            className="rounded-xl border border-border bg-surface p-5 shadow-sm"
+            className="rounded border border-border bg-surface p-5 shadow-sm"
           >
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium text-muted">
@@ -415,17 +528,19 @@ const Team = () => {
             </h2>
           </div>
         ))}
-
       </div>
 
       {/* ADD / EDIT FORM */}
+
       {showForm && (
-        <div className="mb-8 overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+        <div className="mb-8 overflow-hidden rounded border border-border bg-surface shadow-sm">
 
           <div className="flex items-center justify-between border-b border-border px-5 py-4">
             <div>
               <h2 className="font-bold text-heading">
-                {editingId ? "Edit Team Member" : "Add New Team Member"}
+                {editingId
+                  ? "Edit Team Member"
+                  : "Add New Team Member"}
               </h2>
 
               <p className="mt-1 text-xs text-muted">
@@ -434,9 +549,11 @@ const Team = () => {
             </div>
 
             <button
+              type="button"
               onClick={resetForm}
               disabled={saving}
-              className="rounded-lg p-2 text-muted hover:bg-background hover:text-red-500"
+              aria-label="Close form"
+              className="rounded-lg p-2 text-muted hover:bg-background hover:text-red-500 disabled:opacity-50"
             >
               <FaTimes />
             </button>
@@ -447,60 +564,87 @@ const Team = () => {
             className="grid grid-cols-1 gap-5 p-5 md:grid-cols-2"
           >
 
-            {/* NAME */}
+            {/* FULL NAME */}
+
             <div>
-              <label className="mb-2 block text-sm font-medium text-body">
+              <label
+                htmlFor="name"
+                className="mb-2 block text-sm font-medium text-body"
+              >
                 Full Name *
               </label>
 
               <input
+                id="name"
                 name="name"
+                type="text"
                 value={formData.name}
                 onChange={handleChange}
                 placeholder="Enter full name"
+                required
+                maxLength={100}
                 className="w-full rounded-lg border border-border px-4 py-3 text-sm outline-none focus:border-primary"
               />
             </div>
 
-            {/* EMAIL */}
+            {/* WORK EMAIL */}
+
             <div>
-              <label className="mb-2 block text-sm font-medium text-body">
+              <label
+                htmlFor="workEmail"
+                className="mb-2 block text-sm font-medium text-body"
+              >
                 Work Email *
               </label>
 
               <input
+                id="workEmail"
                 type="email"
                 name="workEmail"
                 value={formData.workEmail}
                 onChange={handleChange}
                 placeholder="example@company.com"
+                required
                 className="w-full rounded-lg border border-border px-4 py-3 text-sm outline-none focus:border-primary"
               />
             </div>
 
             {/* DESIGNATION */}
+
             <div>
-              <label className="mb-2 block text-sm font-medium text-body">
+              <label
+                htmlFor="designation"
+                className="mb-2 block text-sm font-medium text-body"
+              >
                 Designation *
               </label>
 
               <input
+                id="designation"
                 name="designation"
+                type="text"
                 value={formData.designation}
                 onChange={handleChange}
                 placeholder="Senior Structural Engineer"
+                required
                 className="w-full rounded-lg border border-border px-4 py-3 text-sm outline-none focus:border-primary"
               />
             </div>
 
             {/* EDUCATION */}
+
             <div>
-              <label className="mb-2 block text-sm font-medium text-body">
+              <label
+                htmlFor="education"
+                className="mb-2 block text-sm font-medium text-body"
+              >
                 Education
               </label>
 
               <input
+                id="education"
                 name="education"
+                type="text"
                 value={formData.education}
                 onChange={handleChange}
                 placeholder="M.Tech Structural Engineering"
@@ -508,13 +652,18 @@ const Team = () => {
               />
             </div>
 
-            {/* NOTE */}
+            {/* PROFESSIONAL INTRODUCTION */}
+
             <div className="md:col-span-2">
-              <label className="mb-2 block text-sm font-medium text-body">
+              <label
+                htmlFor="note"
+                className="mb-2 block text-sm font-medium text-body"
+              >
                 Professional Introduction
               </label>
 
               <textarea
+                id="note"
                 name="note"
                 rows={4}
                 value={formData.note}
@@ -524,14 +673,23 @@ const Team = () => {
               />
             </div>
 
-            {/* PHOTO */}
+            {/* PHOTO UPLOAD */}
+
             <div>
               <label className="mb-2 block text-sm font-medium text-body">
                 Profile Photo {!editingId && "*"}
               </label>
 
               <div
+                role="button"
+                tabIndex={0}
                 onClick={() => fileInputRef.current?.click()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    fileInputRef.current?.click();
+                  }
+                }}
                 className="flex min-h-36 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border bg-background p-5 text-center transition hover:border-secondary"
               >
                 <FaCloudUploadAlt className="mb-2 text-3xl text-primary" />
@@ -554,7 +712,7 @@ const Team = () => {
               </div>
 
               {photo && (
-                <p className="mt-2 text-xs text-muted">
+                <p className="mt-2 break-all text-xs text-muted">
                   Selected: {photo.name}
                 </p>
               )}
@@ -566,7 +724,8 @@ const Team = () => {
               )}
             </div>
 
-            {/* PREVIEW */}
+            {/* PHOTO PREVIEW */}
+
             <div>
               <label className="mb-2 block text-sm font-medium text-body">
                 Photo Preview
@@ -576,7 +735,7 @@ const Team = () => {
                 {preview ? (
                   <img
                     src={preview}
-                    alt="Preview"
+                    alt="Team member preview"
                     className="h-36 w-full object-contain"
                   />
                 ) : (
@@ -585,14 +744,14 @@ const Team = () => {
               </div>
             </div>
 
-            {/* ACTION BUTTONS */}
-            <div className="flex flex-col-reverse gap-3 sm:flex-row md:col-span-2 md:justify-end">
+            {/* FORM BUTTONS */}
 
+            <div className="flex flex-col-reverse gap-3 sm:flex-row md:col-span-2 md:justify-end">
               <button
                 type="button"
                 onClick={resetForm}
                 disabled={saving}
-                className="rounded-lg border border-border px-6 py-3 text-sm font-semibold text-body hover:bg-background"
+                className="rounded-lg border border-border px-6 py-3 text-sm font-semibold text-body hover:bg-background disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -600,7 +759,7 @@ const Team = () => {
               <button
                 type="submit"
                 disabled={saving}
-                className="flex items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-white hover:bg-footer disabled:opacity-60"
+                className="flex items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-white transition hover:bg-footer disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {saving ? (
                   <>
@@ -610,23 +769,25 @@ const Team = () => {
                 ) : (
                   <>
                     {editingId ? <FaEdit /> : <FaPlus />}
-                    {editingId ? "Update Member" : "Save Member"}
+
+                    {editingId
+                      ? "Update Member"
+                      : "Save Member"}
                   </>
                 )}
               </button>
-
             </div>
-
           </form>
         </div>
       )}
 
-      {/* ALL TEAM MEMBERS TABLE */}
-      <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+      {/* ALL TEAM MEMBERS */}
+
+      <div className="overflow-hidden rounded border border-border bg-surface shadow-sm">
 
         {/* TABLE HEADER */}
-        <div className="flex flex-col justify-between gap-4 border-b border-border p-5 lg:flex-row lg:items-center">
 
+        <div className="flex flex-col justify-between gap-4 border-b border-border p-5 lg:flex-row lg:items-center">
           <div>
             <h2 className="text-base font-bold text-heading">
               All Team Members
@@ -638,6 +799,7 @@ const Team = () => {
           </div>
 
           {/* SEARCH */}
+
           <div className="relative w-full lg:max-w-xs">
             <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
 
@@ -649,27 +811,20 @@ const Team = () => {
               className="w-full rounded-lg border border-border py-3 pl-10 pr-4 text-sm outline-none focus:border-primary"
             />
           </div>
-
         </div>
 
         {/* TABLE */}
-        <div className="overflow-x-auto">
 
+        <div className="overflow-x-auto">
           <table className="w-full min-w-[900px] border-collapse text-left">
 
             <thead className="bg-background">
               <tr className="text-xs font-semibold uppercase tracking-wide text-muted">
-
                 <th className="px-5 py-4">Team Member</th>
-
                 <th className="px-5 py-4">Designation</th>
-
                 <th className="px-5 py-4">Education</th>
-
                 <th className="px-5 py-4">Email</th>
-
                 <th className="px-5 py-4 text-center">Actions</th>
-
               </tr>
             </thead>
 
@@ -679,6 +834,7 @@ const Team = () => {
                 <tr>
                   <td colSpan="5" className="py-16 text-center">
                     <FaSpinner className="mx-auto mb-3 animate-spin text-2xl text-primary" />
+
                     <p className="text-sm text-muted">
                       Loading team members...
                     </p>
@@ -708,36 +864,44 @@ const Team = () => {
                   >
 
                     {/* MEMBER */}
+
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
-
-                        <img
-                          src={member.photo?.url}
-                          alt={member.name}
-                          className="h-12 w-12 shrink-0 rounded-lg border border-border object-cover"
-                        />
+                        {member.photo?.url ? (
+                          <img
+                            src={member.photo.url}
+                            alt={member.name || "Team member"}
+                            loading="lazy"
+                            className="h-12 w-12 shrink-0 rounded-lg border border-border object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-muted">
+                            <FaUserTie />
+                          </div>
+                        )}
 
                         <div className="min-w-0">
-                          <p className="max-w-48 font-semibold text-heading">
-                            {member.name}
+                          <p className="max-w-48 truncate font-semibold text-heading">
+                            {member.name || "Unnamed"}
                           </p>
 
                           <p className="mt-1 text-xs text-muted">
                             Team Member
                           </p>
                         </div>
-
                       </div>
                     </td>
 
                     {/* DESIGNATION */}
+
                     <td className="px-5 py-4">
                       <span className="inline-block max-w-48 truncate rounded-full bg-secondary/15 px-3 py-1.5 text-xs font-medium text-body">
-                        {member.designation}
+                        {member.designation || "—"}
                       </span>
                     </td>
 
                     {/* EDUCATION */}
+
                     <td className="px-5 py-4">
                       <span className="text-sm text-body">
                         {member.education || "—"}
@@ -745,25 +909,30 @@ const Team = () => {
                     </td>
 
                     {/* EMAIL */}
+
                     <td className="px-5 py-4">
                       <span className="text-sm text-body">
-                        {member.workEmail}
+                        {member.workEmail || "—"}
                       </span>
                     </td>
 
                     {/* ACTIONS */}
+
                     <td className="px-5 py-4">
                       <div className="flex items-center justify-center gap-2">
 
                         <button
+                          type="button"
                           onClick={() => setViewMember(member)}
                           title="View profile"
+                          aria-label="View profile"
                           className="rounded-md bg-blue-50 px-3 py-2 text-xs font-medium text-primary transition hover:bg-blue-100"
                         >
                           <FaEye />
                         </button>
 
                         <button
+                          type="button"
                           onClick={() => handleEdit(member)}
                           className="rounded-md bg-slate-100 px-3 py-2 text-xs font-medium text-primary transition hover:bg-slate-200"
                         >
@@ -771,44 +940,51 @@ const Team = () => {
                         </button>
 
                         <button
+                          type="button"
                           onClick={() => handleDelete(member._id)}
-                          className="rounded-md bg-red-50 px-3 py-2 text-xs font-medium text-red-600 transition hover:bg-red-100"
+                          disabled={deletingId === member._id}
+                          className="flex items-center gap-1 rounded-md bg-red-50 px-3 py-2 text-xs font-medium text-red-600 transition hover:bg-red-100 disabled:opacity-50"
                         >
+                          {deletingId === member._id ? (
+                            <FaSpinner className="animate-spin" />
+                          ) : (
+                            <FaTrash />
+                          )}
+
                           Delete
                         </button>
-
                       </div>
                     </td>
-
                   </tr>
                 ))
               )}
 
             </tbody>
-
           </table>
-
         </div>
 
         {/* TABLE FOOTER */}
+
         <div className="border-t border-border px-5 py-4">
           <p className="text-sm text-muted">
             Showing {filteredTeam.length} of {team.length} team members
           </p>
         </div>
-
       </div>
 
       {/* VIEW MEMBER MODAL */}
+
       {viewMember && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-footer/60 p-4 backdrop-blur-sm"
           onClick={() => setViewMember(null)}
         >
           <div
-            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-surface shadow-2xl"
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded bg-surface shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
+
+            {/* MODAL HEADER */}
 
             <div className="flex items-center justify-between border-b border-border p-5">
               <h2 className="font-bold text-heading">
@@ -816,21 +992,29 @@ const Team = () => {
               </h2>
 
               <button
+                type="button"
                 onClick={() => setViewMember(null)}
+                aria-label="Close profile"
                 className="text-muted hover:text-red-500"
               >
                 <FaTimes />
               </button>
             </div>
 
+            {/* MEMBER DETAILS */}
+
             <div className="p-6">
 
-              <div className="mx-auto mb-4 h-28 w-28 overflow-hidden rounded-full border-4 border-secondary/30">
-                <img
-                  src={viewMember.photo?.url}
-                  alt={viewMember.name}
-                  className="h-full w-full object-cover"
-                />
+              <div className="mx-auto mb-4 flex h-28 w-28 items-center justify-center overflow-hidden rounded-full border-4 border-secondary/30 bg-background">
+                {viewMember.photo?.url ? (
+                  <img
+                    src={viewMember.photo.url}
+                    alt={viewMember.name || "Team member"}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <FaUserTie className="text-4xl text-muted" />
+                )}
               </div>
 
               <div className="text-center">
@@ -845,37 +1029,58 @@ const Team = () => {
 
               <div className="mt-6 space-y-3">
 
+                {/* EMAIL */}
+
                 <div className="rounded-lg bg-background p-4">
-                  <p className="text-xs text-muted">Work Email</p>
-                  <p className="mt-1 break-all text-sm font-medium text-body">
-                    {viewMember.workEmail}
+                  <div className="flex items-center gap-2 text-muted">
+                    <FaEnvelope />
+                    <p className="text-xs">Work Email</p>
+                  </div>
+
+                  <p className="mt-2 break-all text-sm font-medium text-body">
+                    {viewMember.workEmail || "Not provided"}
                   </p>
                 </div>
 
+                {/* EDUCATION */}
+
                 <div className="rounded-lg bg-background p-4">
-                  <p className="text-xs text-muted">Education</p>
-                  <p className="mt-1 text-sm font-medium text-body">
+                  <div className="flex items-center gap-2 text-muted">
+                    <FaGraduationCap />
+                    <p className="text-xs">Education</p>
+                  </div>
+
+                  <p className="mt-2 text-sm font-medium text-body">
                     {viewMember.education || "Not provided"}
                   </p>
                 </div>
 
+                {/* INTRODUCTION */}
+
                 <div className="rounded-lg bg-background p-4">
-                  <p className="text-xs text-muted">Professional Introduction</p>
+                  <div className="flex items-center gap-2 text-muted">
+                    <FaUserTie />
+                    <p className="text-xs">
+                      Professional Introduction
+                    </p>
+                  </div>
+
                   <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-body">
                     {viewMember.note || "No introduction available."}
                   </p>
                 </div>
-
               </div>
 
+              {/* EDIT BUTTON */}
+
               <button
+                type="button"
                 onClick={() => handleEdit(viewMember)}
-                className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-white hover:bg-footer"
+                className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-footer"
               >
                 <FaEdit />
                 Edit Member
               </button>
-
             </div>
           </div>
         </div>

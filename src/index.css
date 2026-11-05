@@ -1,5 +1,5 @@
 @import "tailwindcss";
-
+@plugin "tailwind-scrollbar";
 @theme {
   /* Brand Colors */
   --color-primary: #223F79;
@@ -20,4 +20,34 @@
 
   /* Footer */
   --color-footer: #172B50;
+}
+@layer components {
+  .form-input {
+    @apply w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-[#223F79] focus:ring-2 focus:ring-[#223F79]/10;
+  }
+}
+
+
+/* Sidebar Scrollbar */
+.sidebar-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-track {
+  background: #172B50;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-thumb {
+  background: #64748b;
+  border-radius: 20px;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #D99A32;
+}
+
+/* Firefox */
+.sidebar-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #64748b #172B50;
 }

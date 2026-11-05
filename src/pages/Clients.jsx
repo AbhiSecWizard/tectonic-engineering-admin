@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 const API_URL = (
@@ -16,7 +15,7 @@ const EMPTY_CONTACT = {
   isPrimary: false,
 };
 
-const EMPTY_FORM = {
+const createEmptyForm = () => ({
   name: "",
   shortName: "",
   sector: "private",
@@ -33,43 +32,65 @@ const EMPTY_FORM = {
   work: "",
   scope: "",
   logo: null,
-};
+});
 
 async function apiRequest(path, options = {}) {
-  const response = await fetch(`${API_URL}${path}`,{...options, credentials: "include"});
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options,
+    credentials: "include",
+  });
+
   const result = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(result.message || "Something went wrong.");
+    throw new Error(result.message || `Request failed (${response.status})`);
   }
 
   return result;
 }
 
+// Convert form data into multipart FormData
 function createFormData(form) {
   const formData = new FormData();
 
   const payload = {
-    name: form.name,
-    shortName: form.shortName,
+    name: form.name.trim(),
+    shortName: form.shortName.trim(),
     sector: form.sector,
     status: form.status,
-    website: form.website,
-    gstin: form.gstin,
+    website: form.website.trim(),
+    gstin: form.gstin.trim(),
+
     location: {
-      city: form.city,
-      state: form.state,
-      country: form.country,
+      city: form.city.trim(),
+      state: form.state.trim(),
+      country: form.country.trim(),
     },
-    contacts: form.contacts,
-    notes: form.notes,
+
+    contacts: form.contacts
+      .filter((contact) =>
+        Object.values(contact).some((value) =>
+          typeof value === "boolean" ? value : String(value).trim()
+        )
+      )
+      .map((contact) => ({
+        ...contact,
+        name: contact.name.trim(),
+        designation: contact.designation.trim(),
+        email: contact.email.trim(),
+        phone: contact.phone.trim(),
+      })),
+
+    notes: form.notes.trim(),
     showOnWebsite: String(form.showOnWebsite),
-    displayOrder: String(form.displayOrder),
+    displayOrder: String(Number(form.displayOrder) || 0),
+
     work: form.work
       .split(",")
       .map((item) => item.trim())
       .filter(Boolean),
-    scope: form.scope,
+
+    scope: form.scope.trim(),
   };
 
   Object.entries(payload).forEach(([key, value]) => {
@@ -87,10 +108,46 @@ function createFormData(form) {
   return formData;
 }
 
+// Convert API client data into form values
+function mapClientToForm(client) {
+  return {
+    name: client.name || "",
+    shortName: client.shortName || "",
+    sector: client.sector || "private",
+    status: client.status || "active",
+    website: client.website || "",
+    gstin: client.gstin || "",
+
+    city: client.location?.city || "",
+    state: client.location?.state || "",
+    country: client.location?.country || "India",
+
+    contacts:
+      client.contacts?.length > 0
+        ? client.contacts.map((contact) => ({
+            name: contact.name || "",
+            designation: contact.designation || "",
+            email: contact.email || "",
+            phone: contact.phone || "",
+            isPrimary: Boolean(contact.isPrimary),
+          }))
+        : [{ ...EMPTY_CONTACT }],
+
+    notes: client.notes || "",
+    showOnWebsite: Boolean(client.showOnWebsite),
+    displayOrder: client.displayOrder ?? 0,
+    work: (client.work || []).join(", "),
+    scope: client.scope || "",
+    logo: null,
+  };
+}
+
 export default function Clients() {
   const [clients, setClients] = useState([]);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [actionId, setActionId] = useState(null);
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -102,8 +159,17 @@ export default function Clients() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
 
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState(createEmptyForm);
   const [logoPreview, setLogoPreview] = useState("");
+
+  // Revoke temporary image URLs when preview changes or component unmounts.
+  useEffect(() => {
+    return () => {
+      if (logoPreview.startsWith("blob:")) {
+        URL.revokeObjectURL(logoPreview);
+      }
+    };
+  }, [logoPreview]);
 
   // Fetch clients
   const fetchClients = useCallback(async () => {
@@ -113,9 +179,9 @@ export default function Clients() {
 
       const result = await apiRequest("/api/clients");
 
-      setClients(result.data || []);
+      setClients(Array.isArray(result.data) ? result.data : []);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Unable to load clients.");
     } finally {
       setLoading(false);
     }
@@ -145,7 +211,7 @@ export default function Clients() {
     });
   }, [clients, search, sectorFilter, statusFilter]);
 
-  // Dashboard counts
+  // Dashboard statistics
   const stats = useMemo(
     () => ({
       total: clients.length,
@@ -158,15 +224,7 @@ export default function Clients() {
 
   // Reset form
   const resetForm = () => {
-    if (logoPreview.startsWith("blob:")) {
-      URL.revokeObjectURL(logoPreview);
-    }
-
-    setForm({
-      ...EMPTY_FORM,
-      contacts: [{ ...EMPTY_CONTACT }],
-    });
-
+    setForm(createEmptyForm());
     setLogoPreview("");
     setEditingId(null);
   };
@@ -183,53 +241,32 @@ export default function Clients() {
   const openEditModal = async (id) => {
     try {
       setError("");
+      setSuccess("");
 
       const result = await apiRequest(`/api/clients/${id}`);
+
+      if (!result.data) {
+        throw new Error("Client details not found.");
+      }
+
       const client = result.data;
 
       setEditingId(id);
-
-      setForm({
-        name: client.name || "",
-        shortName: client.shortName || "",
-        sector: client.sector || "private",
-        status: client.status || "active",
-        website: client.website || "",
-        gstin: client.gstin || "",
-        city: client.location?.city || "",
-        state: client.location?.state || "",
-        country: client.location?.country || "India",
-        contacts:
-          client.contacts?.length > 0
-            ? client.contacts.map((contact) => ({
-                name: contact.name || "",
-                designation: contact.designation || "",
-                email: contact.email || "",
-                phone: contact.phone || "",
-                isPrimary: Boolean(contact.isPrimary),
-              }))
-            : [{ ...EMPTY_CONTACT }],
-        notes: client.notes || "",
-        showOnWebsite: Boolean(client.showOnWebsite),
-        displayOrder: client.displayOrder ?? 0,
-        work: (client.work || []).join(", "),
-        scope: client.scope || "",
-        logo: null,
-      });
-
+      setForm(mapClientToForm(client));
       setLogoPreview(client.logo?.url || "");
       setIsModalOpen(true);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Unable to load client details.");
     }
   };
 
-  // Simple form changes
+  // Handle normal form inputs
   const handleChange = (event) => {
     const { name, value, type, checked, files } = event.target;
 
     if (type === "file") {
       const file = files?.[0];
+
       if (!file) return;
 
       if (!file.type.startsWith("image/")) {
@@ -244,10 +281,6 @@ export default function Clients() {
         return;
       }
 
-      if (logoPreview.startsWith("blob:")) {
-        URL.revokeObjectURL(logoPreview);
-      }
-
       setError("");
       setForm((prev) => ({ ...prev, logo: file }));
       setLogoPreview(URL.createObjectURL(file));
@@ -260,21 +293,26 @@ export default function Clients() {
     }));
   };
 
-  // Contact changes
+  // Handle contact person fields
   const handleContactChange = (index, field, value) => {
     setForm((prev) => ({
       ...prev,
-      contacts: prev.contacts.map((contact, i) => ({
-        ...contact,
-        [field]: field === "isPrimary" ? value : value,
-        ...(field === "isPrimary" && value && i !== index
-          ? { isPrimary: false }
-          : {}),
-      })),
+      contacts: prev.contacts.map((contact, currentIndex) => {
+        if (field === "isPrimary") {
+          return {
+            ...contact,
+            isPrimary: currentIndex === index,
+          };
+        }
+
+        return currentIndex === index
+          ? { ...contact, [field]: value }
+          : contact;
+      }),
     }));
   };
 
-  // Add contact
+  // Add contact person
   const addContact = () => {
     setForm((prev) => ({
       ...prev,
@@ -282,13 +320,18 @@ export default function Clients() {
     }));
   };
 
-  // Remove contact
+  // Remove contact person
   const removeContact = (index) => {
     setForm((prev) => {
-      const contacts = prev.contacts.filter((_, i) => i !== index);
+      const contacts = prev.contacts.filter(
+        (_, currentIndex) => currentIndex !== index
+      );
 
-      if (contacts.length > 0 && !contacts.some((item) => item.isPrimary)) {
-        contacts[0].isPrimary = true;
+      if (
+        contacts.length > 0 &&
+        !contacts.some((contact) => contact.isPrimary)
+      ) {
+        contacts[0] = { ...contacts[0], isPrimary: true };
       }
 
       return {
@@ -302,6 +345,8 @@ export default function Clients() {
   // Create or update client
   const handleSubmit = async (event) => {
     event.preventDefault();
+
+    if (saving) return;
 
     try {
       setSaving(true);
@@ -329,10 +374,53 @@ export default function Clients() {
 
       await fetchClients();
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Unable to save client.");
     } finally {
       setSaving(false);
     }
+  };
+
+  // Update client using existing PUT endpoint
+  const updateClient = async (client, updates, successMessage) => {
+    try {
+      setActionId(client._id);
+      setError("");
+      setSuccess("");
+
+      const updatedForm = {
+        ...mapClientToForm(client),
+        ...updates,
+      };
+
+      const result = await apiRequest(`/api/clients/${client._id}`, {
+        method: "PUT",
+        body: createFormData(updatedForm),
+      });
+
+      setSuccess(result.message || successMessage);
+      await fetchClients();
+    } catch (err) {
+      setError(err.message || "Unable to update client.");
+      await fetchClients();
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  // Update client status
+  const handleStatusChange = (client, status) => {
+    if (client.status === status) return;
+
+    updateClient(client, { status }, "Client status updated.");
+  };
+
+  // Toggle website visibility
+  const handleWebsiteVisibility = (client) => {
+    updateClient(
+      client,
+      { showOnWebsite: !client.showOnWebsite },
+      "Website visibility updated."
+    );
   };
 
   // Delete client
@@ -344,6 +432,7 @@ export default function Clients() {
     if (!confirmed) return;
 
     try {
+      setActionId(id);
       setError("");
       setSuccess("");
 
@@ -354,109 +443,22 @@ export default function Clients() {
       setSuccess(result.message || "Client deleted successfully.");
       await fetchClients();
     } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  // Update client status
-  const handleStatusChange = async (client, status) => {
-    try {
-      setError("");
-      setSuccess("");
-
-      const formData = createFormData({
-        ...EMPTY_FORM,
-        name: client.name || "",
-        shortName: client.shortName || "",
-        sector: client.sector || "private",
-        status,
-        website: client.website || "",
-        gstin: client.gstin || "",
-        city: client.location?.city || "",
-        state: client.location?.state || "",
-        country: client.location?.country || "India",
-        contacts: (client.contacts || []).map((contact) => ({
-          name: contact.name || "",
-          designation: contact.designation || "",
-          email: contact.email || "",
-          phone: contact.phone || "",
-          isPrimary: Boolean(contact.isPrimary),
-        })),
-        notes: client.notes || "",
-        showOnWebsite: Boolean(client.showOnWebsite),
-        displayOrder: client.displayOrder ?? 0,
-        work: (client.work || []).join(", "),
-        scope: client.scope || "",
-        logo: null,
-      });
-
-      const result = await apiRequest(`/api/clients/${client._id}`, {
-        method: "PUT",
-        body: formData,
-      });
-
-      setSuccess(result.message || "Client status updated.");
-      await fetchClients();
-    } catch (err) {
-      setError(err.message);
-      await fetchClients();
-    }
-  };
-
-  // Toggle website visibility
-  const handleWebsiteVisibility = async (client) => {
-    try {
-      setError("");
-      setSuccess("");
-
-      const formData = createFormData({
-        ...EMPTY_FORM,
-        name: client.name || "",
-        shortName: client.shortName || "",
-        sector: client.sector || "private",
-        status: client.status || "active",
-        website: client.website || "",
-        gstin: client.gstin || "",
-        city: client.location?.city || "",
-        state: client.location?.state || "",
-        country: client.location?.country || "India",
-        contacts: (client.contacts || []).map((contact) => ({
-          name: contact.name || "",
-          designation: contact.designation || "",
-          email: contact.email || "",
-          phone: contact.phone || "",
-          isPrimary: Boolean(contact.isPrimary),
-        })),
-        notes: client.notes || "",
-        showOnWebsite: !client.showOnWebsite,
-        displayOrder: client.displayOrder ?? 0,
-        work: (client.work || []).join(", "),
-        scope: client.scope || "",
-        logo: null,
-      });
-
-      const result = await apiRequest(`/api/clients/${client._id}`, {
-        method: "PUT",
-        body: formData,
-      });
-
-      setSuccess(result.message || "Website visibility updated.");
-      await fetchClients();
-    } catch (err) {
-      setError(err.message);
-      await fetchClients();
+      setError(err.message || "Unable to delete client.");
+    } finally {
+      setActionId(null);
     }
   };
 
   // Close modal
   const closeModal = () => {
+    if (saving) return;
+
     setIsModalOpen(false);
     resetForm();
   };
 
   return (
     <main className="min-h-screen bg-background p-4 text-body sm:p-6 lg:p-8">
-
       {/* Header */}
       <header className="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
         <div>
@@ -474,6 +476,7 @@ export default function Clients() {
         </div>
 
         <button
+          type="button"
           onClick={openCreateModal}
           className="rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-footer"
         >
@@ -501,19 +504,31 @@ export default function Clients() {
       {/* Statistics */}
       <section className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard title="Total Clients" value={stats.total} icon="▤" />
-        <StatCard title="Active Clients" value={stats.active} icon="✓" accent="text-green-700" />
-        <StatCard title="Prospects" value={stats.prospects} icon="◷" accent="text-secondary" />
-        <StatCard title="On Website" value={stats.website} icon="◎" accent="text-primary" />
+        <StatCard
+          title="Active Clients"
+          value={stats.active}
+          icon="✓"
+          accent="text-green-700"
+        />
+        <StatCard
+          title="Prospects"
+          value={stats.prospects}
+          icon="◷"
+          accent="text-secondary"
+        />
+        <StatCard
+          title="On Website"
+          value={stats.website}
+          icon="◎"
+          accent="text-primary"
+        />
       </section>
 
       {/* Client list */}
-      <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
-
+      <section className="overflow-hidden rounded border border-border bg-surface shadow-sm">
         <div className="flex flex-col justify-between gap-4 border-b border-border p-5 lg:flex-row lg:items-center">
           <div>
-            <h2 className="text-lg font-bold text-heading">
-              All Clients
-            </h2>
+            <h2 className="text-lg font-bold text-heading">All Clients</h2>
             <p className="mt-1 text-sm text-muted">
               View and manage your client records.
             </p>
@@ -559,13 +574,11 @@ export default function Clients() {
         {/* Table */}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1000px] text-left">
-
             <thead className="bg-background text-xs uppercase tracking-wider text-muted">
               <tr>
                 <th className="px-5 py-4">Client</th>
                 <th className="px-5 py-4">Sector</th>
                 <th className="px-5 py-4">Location</th>
-                <th className="px-5 py-4">Projects</th>
                 <th className="px-5 py-4">Status</th>
                 <th className="px-5 py-4">Website</th>
                 <th className="px-5 py-4">Actions</th>
@@ -579,8 +592,10 @@ export default function Clients() {
                 <TableMessage message="No clients found." />
               ) : (
                 filteredClients.map((client) => (
-                  <tr key={client._id} className="transition hover:bg-background/70">
-
+                  <tr
+                    key={client._id}
+                    className="transition hover:bg-background/70"
+                  >
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
                         {client.logo?.url ? (
@@ -622,11 +637,12 @@ export default function Clients() {
 
                     <td className="px-5 py-4">
                       <select
-                        value={client.status}
+                        value={client.status || "active"}
+                        disabled={actionId === client._id}
                         onChange={(e) =>
                           handleStatusChange(client, e.target.value)
                         }
-                        className="rounded-lg border border-border bg-surface px-2 py-2 text-xs text-body"
+                        className="rounded-lg border border-border bg-surface px-2 py-2 text-xs text-body disabled:opacity-50"
                         aria-label={`Change status for ${client.name}`}
                       >
                         {STATUSES.map((status) => (
@@ -639,8 +655,10 @@ export default function Clients() {
 
                     <td className="px-5 py-4">
                       <button
+                        type="button"
+                        disabled={actionId === client._id}
                         onClick={() => handleWebsiteVisibility(client)}
-                        className={`rounded-lg px-3 py-2 text-xs font-semibold ${
+                        className={`rounded-lg px-3 py-2 text-xs font-semibold disabled:opacity-50 ${
                           client.showOnWebsite
                             ? "bg-green-100 text-green-700"
                             : "bg-background text-muted"
@@ -653,15 +671,19 @@ export default function Clients() {
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-2">
                         <button
+                          type="button"
+                          disabled={actionId === client._id}
                           onClick={() => openEditModal(client._id)}
-                          className="rounded-md bg-primary/10 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/20"
+                          className="rounded-md bg-primary/10 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/20 disabled:opacity-50"
                         >
                           Edit
                         </button>
 
                         <button
+                          type="button"
+                          disabled={actionId === client._id}
                           onClick={() => handleDelete(client._id)}
-                          className="rounded-md bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100"
+                          className="rounded-md bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
                         >
                           Delete
                         </button>
@@ -682,8 +704,7 @@ export default function Clients() {
       {/* Create / Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-footer/70 p-3 py-8 sm:p-6">
-          <div className="my-auto w-full max-w-4xl overflow-hidden rounded-xl bg-surface shadow-2xl">
-
+          <div className="my-auto w-full max-w-4xl overflow-hidden rounded bg-surface shadow-2xl">
             <div className="flex items-center justify-between border-b border-border p-5">
               <div>
                 <h2 className="text-xl font-bold text-heading">
@@ -697,7 +718,8 @@ export default function Clients() {
               <button
                 type="button"
                 onClick={closeModal}
-                className="text-2xl text-muted hover:text-heading"
+                disabled={saving}
+                className="text-2xl text-muted hover:text-heading disabled:opacity-50"
                 aria-label="Close modal"
               >
                 ×
@@ -705,11 +727,9 @@ export default function Clients() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-7 p-5">
-
               {/* Basic information */}
               <FormSection title="Basic Information">
                 <div className="grid gap-4 sm:grid-cols-2">
-
                   <FormField label="Client Name *">
                     <input
                       name="name"
@@ -871,13 +891,12 @@ export default function Clients() {
                       </div>
 
                       <div className="grid gap-4 sm:grid-cols-2">
-                        <FormField label="Contact Name *">
+                        <FormField label="Contact Name">
                           <input
                             value={contact.name}
                             onChange={(e) =>
                               handleContactChange(index, "name", e.target.value)
                             }
-                            required
                             maxLength={100}
                             className="form-input"
                             placeholder="Full name"
@@ -888,7 +907,11 @@ export default function Clients() {
                           <input
                             value={contact.designation}
                             onChange={(e) =>
-                              handleContactChange(index, "designation", e.target.value)
+                              handleContactChange(
+                                index,
+                                "designation",
+                                e.target.value
+                              )
                             }
                             className="form-input"
                             placeholder="Project Manager"
@@ -1021,12 +1044,13 @@ export default function Clients() {
                 </label>
               </FormSection>
 
-              {/* Actions */}
+              {/* Form actions */}
               <div className="flex flex-col-reverse justify-end gap-3 border-t border-border pt-5 sm:flex-row">
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="rounded-lg border border-border px-5 py-3 text-sm font-semibold text-body hover:bg-background"
+                  disabled={saving}
+                  className="rounded-lg border border-border px-5 py-3 text-sm font-semibold text-body hover:bg-background disabled:opacity-50"
                 >
                   Cancel
                 </button>
@@ -1059,27 +1083,13 @@ function capitalize(value = "") {
 
 function StatCard({ title, value, icon, accent = "text-heading" }) {
   return (
-    <div className="rounded-xl border border-border bg-surface p-5 shadow-sm">
+    <div className="rounded border border-border bg-surface p-5 shadow-sm">
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium text-muted">{title}</p>
         <span className={`text-xl ${accent}`}>{icon}</span>
       </div>
       <h3 className={`mt-3 text-3xl font-bold ${accent}`}>{value}</h3>
     </div>
-  );
-}
-
-function StatusBadge({ status }) {
-  const styles = {
-    active: "bg-green-100 text-green-700",
-    prospect: "bg-secondary/15 text-primary",
-    inactive: "bg-background text-muted",
-  };
-
-  return (
-    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${styles[status] || styles.inactive}`}>
-      {capitalize(status)}
-    </span>
   );
 }
 
@@ -1091,8 +1101,12 @@ function SectorBadge({ sector }) {
   };
 
   return (
-    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${styles[sector] || "bg-background text-muted"}`}>
-      {capitalize(sector)}
+    <span
+      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+        styles[sector] || "bg-background text-muted"
+      }`}
+    >
+      {capitalize(sector || "")}
     </span>
   );
 }
@@ -1126,7 +1140,10 @@ function Notification({ type, message, onClose }) {
       : "border-green-200 bg-green-50 text-green-700";
 
   return (
-    <div className={`mb-5 flex items-center justify-between rounded-lg border p-4 text-sm ${styles}`}>
+    <div
+      className={`mb-5 flex items-center justify-between rounded-lg border p-4 text-sm ${styles}`}
+      role="alert"
+    >
       <p>{message}</p>
       <button
         type="button"
@@ -1143,7 +1160,7 @@ function Notification({ type, message, onClose }) {
 function TableMessage({ message }) {
   return (
     <tr>
-      <td colSpan="7" className="p-12 text-center text-sm text-muted">
+      <td colSpan={7} className="p-12 text-center text-sm text-muted">
         {message}
       </td>
     </tr>

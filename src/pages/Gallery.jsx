@@ -16,18 +16,79 @@ import {
   FaCalendarAlt,
 } from "react-icons/fa";
 
+// ==========================================
+// CONFIGURATION
+// ==========================================
+
 const API_URL = (
   import.meta.env.VITE_API_URL || "http://localhost:3000"
 ).replace(/\/$/, "");
 
 const GALLERY_API = `${API_URL}/api/gallery`;
 
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+
+// ==========================================
+// API HELPER
+// ==========================================
+
+const apiRequest = async (url, options = {}) => {
+  const response = await fetch(url, {
+    credentials: "include",
+    ...options,
+  });
+
+  let result = {};
+
+  try {
+    result = await response.json();
+  } catch {
+    result = {};
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      result.message || `Request failed (${response.status})`
+    );
+  }
+
+  return result;
+};
+
+// ==========================================
+// DATE FORMATTER
+// ==========================================
+
+const formatDate = (date) => {
+  if (!date) return "—";
+
+  const parsedDate = new Date(date);
+
+  if (Number.isNaN(parsedDate.getTime())) return "—";
+
+  return parsedDate.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+// ==========================================
+// MAIN GALLERY COMPONENT
+// ==========================================
+
 const Gallery = () => {
+  // ----------------------------------------
+  // STATES
+  // ----------------------------------------
+
   const [gallery, setGallery] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   const [search, setSearch] = useState("");
+
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [viewImage, setViewImage] = useState(null);
@@ -44,25 +105,35 @@ const Gallery = () => {
   const fileInputRef = useRef(null);
   const previewUrlRef = useRef("");
 
+  // ----------------------------------------
+  // NOTIFICATION HELPER
+  // ----------------------------------------
+
+  const showNotification = (type, text) => {
+    setMessage({ type, text });
+  };
+
+  const clearNotification = () => {
+    setMessage({ type: "", text: "" });
+  };
+
+  // ----------------------------------------
   // FETCH GALLERY
+  // ----------------------------------------
+
   const fetchGallery = async () => {
     try {
       setLoading(true);
 
-      const response = await fetch(GALLERY_API);
-      const result = await response.json();
+      const result = await apiRequest(GALLERY_API);
 
-      if (!response.ok) {
-        throw new Error(result.message || "Failed to fetch gallery");
-      }
+      setGallery(
+        Array.isArray(result.data) ? result.data : []
+      );
 
-      setGallery(result.data || []);
-
+      clearNotification();
     } catch (error) {
-      setMessage({
-        type: "error",
-        text: error.message,
-      });
+      showNotification("error", error.message);
     } finally {
       setLoading(false);
     }
@@ -72,7 +143,10 @@ const Gallery = () => {
     fetchGallery();
   }, []);
 
-  // CLEAR PREVIEW URL
+  // ----------------------------------------
+  // PREVIEW URL CLEANUP
+  // ----------------------------------------
+
   const clearPreview = () => {
     if (previewUrlRef.current) {
       URL.revokeObjectURL(previewUrlRef.current);
@@ -80,7 +154,16 @@ const Gallery = () => {
     }
   };
 
+  useEffect(() => {
+    return () => {
+      clearPreview();
+    };
+  }, []);
+
+  // ----------------------------------------
   // RESET FORM
+  // ----------------------------------------
+
   const resetForm = () => {
     clearPreview();
 
@@ -95,14 +178,20 @@ const Gallery = () => {
     }
   };
 
+  // ----------------------------------------
   // ADD NEW IMAGE
+  // ----------------------------------------
+
   const handleAddNew = () => {
     resetForm();
-    setMessage({ type: "", text: "" });
+    clearNotification();
     setShowForm(true);
   };
 
+  // ----------------------------------------
   // EDIT IMAGE
+  // ----------------------------------------
+
   const handleEdit = (item) => {
     clearPreview();
 
@@ -111,10 +200,14 @@ const Gallery = () => {
     setImage(null);
     setPreview(item.image?.url || "");
 
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+
     setShowForm(true);
     setViewImage(null);
 
-    setMessage({ type: "", text: "" });
+    clearNotification();
 
     window.scrollTo({
       top: 0,
@@ -122,27 +215,30 @@ const Gallery = () => {
     });
   };
 
-  // IMAGE CHANGE
+  // ----------------------------------------
+  // IMAGE VALIDATION & PREVIEW
+  // ----------------------------------------
+
   const handleImageChange = (e) => {
     const file = e.target.files?.[0];
 
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      setMessage({
-        type: "error",
-        text: "Please select a valid image.",
-      });
+      showNotification(
+        "error",
+        "Please select a valid image file."
+      );
 
       e.target.value = "";
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      setMessage({
-        type: "error",
-        text: "Image size should not exceed 5MB.",
-      });
+    if (file.size > MAX_IMAGE_SIZE) {
+      showNotification(
+        "error",
+        "Image size should not exceed 5MB."
+      );
 
       e.target.value = "";
       return;
@@ -156,31 +252,30 @@ const Gallery = () => {
 
     setImage(file);
     setPreview(imageUrl);
+
+    clearNotification();
   };
 
+  // ----------------------------------------
   // CREATE / UPDATE IMAGE
+  // ----------------------------------------
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!imageName.trim()) {
-      setMessage({
-        type: "error",
-        text: "Please enter image name.",
-      });
+      showNotification("error", "Please enter image name.");
       return;
     }
 
     if (!editingId && !image) {
-      setMessage({
-        type: "error",
-        text: "Please select an image.",
-      });
+      showNotification("error", "Please select an image.");
       return;
     }
 
     try {
       setSaving(true);
-      setMessage({ type: "", text: "" });
+      clearNotification();
 
       const formData = new FormData();
 
@@ -194,54 +289,50 @@ const Gallery = () => {
         ? `${GALLERY_API}/${editingId}`
         : GALLERY_API;
 
-      const response = await fetch(url, {
+      const result = await apiRequest(url, {
         method: editingId ? "PUT" : "POST",
         body: formData,
       });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.message || "Something went wrong");
-      }
 
       resetForm();
 
       await fetchGallery();
 
-      setMessage({
-        type: "success",
-        text: result.message,
-      });
-
+      showNotification(
+        "success",
+        result.message ||
+          (editingId
+            ? "Gallery image updated successfully."
+            : "Gallery image uploaded successfully.")
+      );
     } catch (error) {
-      setMessage({
-        type: "error",
-        text: error.message,
-      });
+      showNotification("error", error.message);
     } finally {
       setSaving(false);
     }
   };
 
+  // ----------------------------------------
   // DELETE IMAGE
+  // ----------------------------------------
+
   const handleDelete = async (id) => {
-    const confirmDelete = window.confirm(
+    const confirmed = window.confirm(
       "Are you sure you want to delete this gallery image?"
     );
 
-    if (!confirmDelete) return;
+    if (!confirmed) return;
 
     try {
-      const response = await fetch(`${GALLERY_API}/${id}`, {
-        method: "DELETE",
-      });
+      setDeletingId(id);
+      clearNotification();
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.message || "Failed to delete image");
-      }
+      const result = await apiRequest(
+        `${GALLERY_API}/${id}`,
+        {
+          method: "DELETE",
+        }
+      );
 
       setGallery((prev) =>
         prev.filter((item) => item._id !== id)
@@ -251,31 +342,34 @@ const Gallery = () => {
         setViewImage(null);
       }
 
-      setMessage({
-        type: "success",
-        text: result.message,
-      });
-
+      showNotification(
+        "success",
+        result.message || "Gallery image deleted successfully."
+      );
     } catch (error) {
-      setMessage({
-        type: "error",
-        text: error.message,
-      });
+      showNotification("error", error.message);
+    } finally {
+      setDeletingId(null);
     }
   };
 
-  // SEARCH
+  // ----------------------------------------
+  // SEARCH FILTER
+  // ----------------------------------------
+
   const filteredGallery = gallery.filter((item) => {
-    const query = search.toLowerCase().trim();
+    const query = search.trim().toLowerCase();
 
     return (item.imageName || "")
       .toLowerCase()
       .includes(query);
   });
 
+  // ----------------------------------------
   // STATISTICS
-  const currentMonth = new Date().getMonth();
-  const currentYear = new Date().getFullYear();
+  // ----------------------------------------
+
+  const currentDate = new Date();
 
   const thisMonth = gallery.filter((item) => {
     if (!item.createdAt) return false;
@@ -283,8 +377,8 @@ const Gallery = () => {
     const date = new Date(item.createdAt);
 
     return (
-      date.getMonth() === currentMonth &&
-      date.getFullYear() === currentYear
+      date.getMonth() === currentDate.getMonth() &&
+      date.getFullYear() === currentDate.getFullYear()
     );
   }).length;
 
@@ -296,6 +390,8 @@ const Gallery = () => {
     if (!item.createdAt) return latest;
 
     const date = new Date(item.createdAt);
+
+    if (Number.isNaN(date.getTime())) return latest;
 
     return !latest || date > latest ? date : latest;
   }, null);
@@ -322,11 +418,7 @@ const Gallery = () => {
     {
       title: "Latest Upload",
       value: latestUpload
-        ? latestUpload.toLocaleDateString("en-IN", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-          })
+        ? formatDate(latestUpload)
         : "—",
       icon: <FaCheckCircle />,
       color: "text-primary",
@@ -334,23 +426,16 @@ const Gallery = () => {
     },
   ];
 
-  // DATE FORMAT
-  const formatDate = (date) => {
-    if (!date) return "—";
-
-    return new Date(date).toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  };
+  // ========================================
+  // UI
+  // ========================================
 
   return (
     <div className="min-h-screen bg-background p-4 sm:p-6 lg:p-7">
 
       {/* HEADER */}
-      <div className="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
 
+      <div className="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
         <div>
           <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-secondary">
             CRM MANAGEMENT
@@ -366,16 +451,17 @@ const Gallery = () => {
         </div>
 
         <button
+          type="button"
           onClick={handleAddNew}
           className="flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-white transition hover:bg-footer"
         >
           <FaPlus />
           Add New Image
         </button>
-
       </div>
 
       {/* NOTIFICATION */}
+
       {message.text && (
         <div
           className={`mb-5 flex items-center justify-between rounded-lg border p-3 ${
@@ -391,11 +477,13 @@ const Gallery = () => {
               <FaExclamationCircle />
             )}
 
-            {message.text}
+            <span>{message.text}</span>
           </div>
 
           <button
-            onClick={() => setMessage({ type: "", text: "" })}
+            type="button"
+            onClick={clearNotification}
+            aria-label="Close notification"
           >
             <FaTimes />
           </button>
@@ -403,12 +491,12 @@ const Gallery = () => {
       )}
 
       {/* STATISTICS */}
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
 
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {stats.map((stat) => (
           <div
             key={stat.title}
-            className="rounded-xl border border-border bg-surface p-5 shadow-sm"
+            className="rounded border border-border bg-surface p-5 shadow-sm"
           >
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium text-muted">
@@ -429,18 +517,19 @@ const Gallery = () => {
             </h2>
           </div>
         ))}
-
       </div>
 
       {/* ADD / EDIT FORM */}
+
       {showForm && (
-        <div className="mb-8 overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+        <div className="mb-8 overflow-hidden rounded border border-border bg-surface shadow-sm">
 
           <div className="flex items-center justify-between border-b border-border px-5 py-4">
-
             <div>
               <h2 className="font-bold text-heading">
-                {editingId ? "Edit Gallery Image" : "Add New Gallery Image"}
+                {editingId
+                  ? "Edit Gallery Image"
+                  : "Add New Gallery Image"}
               </h2>
 
               <p className="mt-1 text-xs text-muted">
@@ -449,43 +538,59 @@ const Gallery = () => {
             </div>
 
             <button
+              type="button"
               onClick={resetForm}
               disabled={saving}
-              className="rounded-lg p-2 text-muted hover:bg-background hover:text-red-500"
+              aria-label="Close form"
+              className="rounded-lg p-2 text-muted hover:bg-background hover:text-red-500 disabled:opacity-50"
             >
               <FaTimes />
             </button>
-
           </div>
 
           <form
             onSubmit={handleSubmit}
             className="grid grid-cols-1 gap-5 p-5 md:grid-cols-2"
           >
-
             {/* IMAGE NAME */}
+
             <div className="md:col-span-2">
-              <label className="mb-2 block text-sm font-medium text-body">
+              <label
+                htmlFor="imageName"
+                className="mb-2 block text-sm font-medium text-body"
+              >
                 Image Name *
               </label>
 
               <input
+                id="imageName"
                 type="text"
                 value={imageName}
                 onChange={(e) => setImageName(e.target.value)}
                 placeholder="e.g. Structural Steel Project"
+                required
+                maxLength={150}
                 className="w-full rounded-lg border border-border px-4 py-3 text-sm outline-none focus:border-primary"
               />
             </div>
 
             {/* IMAGE UPLOAD */}
+
             <div>
               <label className="mb-2 block text-sm font-medium text-body">
                 Upload Image {!editingId && "*"}
               </label>
 
               <div
+                role="button"
+                tabIndex={0}
                 onClick={() => fileInputRef.current?.click()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    fileInputRef.current?.click();
+                  }
+                }}
                 className="flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border bg-background p-5 text-center transition hover:border-secondary"
               >
                 <FaCloudUploadAlt className="mb-2 text-3xl text-primary" />
@@ -508,7 +613,7 @@ const Gallery = () => {
               </div>
 
               {image && (
-                <p className="mt-2 text-xs text-muted">
+                <p className="mt-2 break-all text-xs text-muted">
                   Selected: {image.name}
                 </p>
               )}
@@ -521,13 +626,13 @@ const Gallery = () => {
             </div>
 
             {/* IMAGE PREVIEW */}
+
             <div>
               <label className="mb-2 block text-sm font-medium text-body">
                 Image Preview
               </label>
 
               <div className="flex min-h-40 items-center justify-center overflow-hidden rounded-lg border border-border bg-background">
-
                 {preview ? (
                   <img
                     src={preview}
@@ -537,23 +642,23 @@ const Gallery = () => {
                 ) : (
                   <div className="text-center text-muted">
                     <FaImage className="mx-auto mb-2 text-4xl" />
+
                     <p className="text-xs">
                       Image preview will appear here
                     </p>
                   </div>
                 )}
-
               </div>
             </div>
 
-            {/* BUTTONS */}
-            <div className="flex flex-col-reverse gap-3 sm:flex-row md:col-span-2 md:justify-end">
+            {/* FORM BUTTONS */}
 
+            <div className="flex flex-col-reverse gap-3 sm:flex-row md:col-span-2 md:justify-end">
               <button
                 type="button"
                 onClick={resetForm}
                 disabled={saving}
-                className="rounded-lg border border-border px-6 py-3 text-sm font-semibold text-body hover:bg-background"
+                className="rounded-lg border border-border px-6 py-3 text-sm font-semibold text-body hover:bg-background disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -561,7 +666,7 @@ const Gallery = () => {
               <button
                 type="submit"
                 disabled={saving}
-                className="flex items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-white transition hover:bg-footer disabled:opacity-60"
+                className="flex items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-white transition hover:bg-footer disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {saving ? (
                   <>
@@ -571,23 +676,25 @@ const Gallery = () => {
                 ) : (
                   <>
                     {editingId ? <FaEdit /> : <FaPlus />}
-                    {editingId ? "Update Image" : "Save Image"}
+
+                    {editingId
+                      ? "Update Image"
+                      : "Save Image"}
                   </>
                 )}
               </button>
-
             </div>
-
           </form>
         </div>
       )}
 
-      {/* ALL GALLERY IMAGES */}
-      <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+      {/* GALLERY TABLE */}
+
+      <div className="overflow-hidden rounded border border-border bg-surface shadow-sm">
 
         {/* TABLE HEADER */}
-        <div className="flex flex-col justify-between gap-4 border-b border-border p-5 lg:flex-row lg:items-center">
 
+        <div className="flex flex-col justify-between gap-4 border-b border-border p-5 lg:flex-row lg:items-center">
           <div>
             <h2 className="text-base font-bold text-heading">
               All Gallery Images
@@ -599,8 +706,8 @@ const Gallery = () => {
           </div>
 
           {/* SEARCH */}
-          <div className="relative w-full lg:max-w-xs">
 
+          <div className="relative w-full lg:max-w-xs">
             <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
 
             <input
@@ -610,48 +717,27 @@ const Gallery = () => {
               placeholder="Search images..."
               className="w-full rounded-lg border border-border py-3 pl-10 pr-4 text-sm outline-none focus:border-primary"
             />
-
           </div>
-
         </div>
 
         {/* TABLE */}
-        <div className="overflow-x-auto">
 
+        <div className="overflow-x-auto">
           <table className="w-full min-w-[750px] border-collapse text-left">
 
             <thead className="bg-background">
-
               <tr className="text-xs font-semibold uppercase tracking-wide text-muted">
-
-                <th className="px-5 py-4">
-                  Image
-                </th>
-
-                <th className="px-5 py-4">
-                  Image Name
-                </th>
-
-                <th className="px-5 py-4">
-                  Uploaded
-                </th>
-
-                <th className="px-5 py-4">
-                  Type
-                </th>
-
-                <th className="px-5 py-4 text-center">
-                  Actions
-                </th>
-
+                <th className="px-5 py-4">Image</th>
+                <th className="px-5 py-4">Image Name</th>
+                <th className="px-5 py-4">Uploaded</th>
+                <th className="px-5 py-4">Type</th>
+                <th className="px-5 py-4 text-center">Actions</th>
               </tr>
-
             </thead>
 
             <tbody className="divide-y divide-border">
 
               {loading ? (
-
                 <tr>
                   <td colSpan="5" className="py-16 text-center">
                     <FaSpinner className="mx-auto mb-3 animate-spin text-2xl text-primary" />
@@ -661,12 +747,9 @@ const Gallery = () => {
                     </p>
                   </td>
                 </tr>
-
               ) : filteredGallery.length === 0 ? (
-
                 <tr>
                   <td colSpan="5" className="py-16 text-center">
-
                     <FaImages className="mx-auto mb-3 text-3xl text-muted" />
 
                     <p className="font-semibold text-heading">
@@ -678,76 +761,76 @@ const Gallery = () => {
                         ? "Try another search."
                         : "Upload your first gallery image."}
                     </p>
-
                   </td>
                 </tr>
-
               ) : (
-
                 filteredGallery.map((item) => (
-
                   <tr
                     key={item._id}
                     className="transition hover:bg-background/70"
                   >
+                    {/* THUMBNAIL */}
 
-                    {/* IMAGE THUMBNAIL */}
                     <td className="px-5 py-4">
-
-                      <img
-                        src={item.image?.url}
-                        alt={item.imageName}
-                        loading="lazy"
-                        className="h-14 w-16 rounded-lg border border-border object-cover"
-                      />
-
+                      {item.image?.url ? (
+                        <img
+                          src={item.image.url}
+                          alt={item.imageName || "Gallery image"}
+                          loading="lazy"
+                          className="h-14 w-16 rounded-lg border border-border object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-14 w-16 items-center justify-center rounded-lg border border-border bg-background text-muted">
+                          <FaImage />
+                        </div>
+                      )}
                     </td>
 
-                    {/* IMAGE NAME */}
-                    <td className="px-5 py-4">
+                    {/* NAME */}
 
+                    <td className="px-5 py-4">
                       <p className="font-semibold text-heading">
-                        {item.imageName}
+                        {item.imageName || "Untitled"}
                       </p>
 
                       <p className="mt-1 text-xs text-muted">
                         Gallery Image
                       </p>
-
                     </td>
 
-                    {/* UPLOADED DATE */}
-                    <td className="px-5 py-4">
+                    {/* DATE */}
 
+                    <td className="px-5 py-4">
                       <span className="text-sm text-body">
                         {formatDate(item.createdAt)}
                       </span>
-
                     </td>
 
-                    {/* IMAGE TYPE */}
-                    <td className="px-5 py-4">
+                    {/* TYPE */}
 
+                    <td className="px-5 py-4">
                       <span className="rounded-full bg-secondary/15 px-3 py-1.5 text-xs font-medium text-body">
                         Image
                       </span>
-
                     </td>
 
                     {/* ACTIONS */}
-                    <td className="px-5 py-4">
 
+                    <td className="px-5 py-4">
                       <div className="flex items-center justify-center gap-2">
 
                         <button
+                          type="button"
                           onClick={() => setViewImage(item)}
                           title="Preview image"
+                          aria-label="Preview image"
                           className="rounded-md bg-blue-50 px-3 py-2 text-xs text-primary transition hover:bg-blue-100"
                         >
                           <FaEye />
                         </button>
 
                         <button
+                          type="button"
                           onClick={() => handleEdit(item)}
                           className="rounded-md bg-slate-100 px-3 py-2 text-xs font-medium text-primary transition hover:bg-slate-200"
                         >
@@ -755,54 +838,52 @@ const Gallery = () => {
                         </button>
 
                         <button
+                          type="button"
                           onClick={() => handleDelete(item._id)}
-                          className="rounded-md bg-red-50 px-3 py-2 text-xs font-medium text-red-600 transition hover:bg-red-100"
+                          disabled={deletingId === item._id}
+                          className="flex items-center gap-1 rounded-md bg-red-50 px-3 py-2 text-xs font-medium text-red-600 transition hover:bg-red-100 disabled:opacity-50"
                         >
+                          {deletingId === item._id ? (
+                            <FaSpinner className="animate-spin" />
+                          ) : (
+                            <FaTrash />
+                          )}
+
                           Delete
                         </button>
-
                       </div>
-
                     </td>
-
                   </tr>
-
                 ))
-
               )}
 
             </tbody>
-
           </table>
-
         </div>
 
         {/* TABLE FOOTER */}
-        <div className="border-t border-border px-5 py-4">
 
+        <div className="border-t border-border px-5 py-4">
           <p className="text-sm text-muted">
             Showing {filteredGallery.length} of {gallery.length} images
           </p>
-
         </div>
-
       </div>
 
       {/* IMAGE PREVIEW MODAL */}
-      {viewImage && (
 
+      {viewImage && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-footer/70 p-4 backdrop-blur-sm"
           onClick={() => setViewImage(null)}
         >
-
           <div
-            className="w-full max-w-2xl overflow-hidden rounded-xl bg-surface shadow-2xl"
+            className="w-full max-w-2xl overflow-hidden rounded bg-surface shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* MODAL HEADER */}
 
             <div className="flex items-center justify-between border-b border-border p-5">
-
               <div>
                 <h2 className="font-bold text-heading">
                   Image Preview
@@ -814,26 +895,34 @@ const Gallery = () => {
               </div>
 
               <button
+                type="button"
                 onClick={() => setViewImage(null)}
+                aria-label="Close preview"
                 className="text-muted transition hover:text-red-500"
               >
                 <FaTimes />
               </button>
-
             </div>
+
+            {/* MODAL IMAGE */}
 
             <div className="bg-background p-4">
-
-              <img
-                src={viewImage.image?.url}
-                alt={viewImage.imageName}
-                className="mx-auto max-h-[60vh] w-full rounded-lg object-contain"
-              />
-
+              {viewImage.image?.url ? (
+                <img
+                  src={viewImage.image.url}
+                  alt={viewImage.imageName || "Gallery image"}
+                  className="mx-auto max-h-[60vh] w-full rounded-lg object-contain"
+                />
+              ) : (
+                <div className="flex h-64 items-center justify-center text-muted">
+                  <FaImage className="text-5xl" />
+                </div>
+              )}
             </div>
 
-            <div className="flex flex-col justify-between gap-3 p-5 sm:flex-row sm:items-center">
+            {/* MODAL FOOTER */}
 
+            <div className="flex flex-col justify-between gap-3 p-5 sm:flex-row sm:items-center">
               <div>
                 <p className="font-semibold text-heading">
                   {viewImage.imageName}
@@ -845,8 +934,8 @@ const Gallery = () => {
               </div>
 
               <div className="flex gap-2">
-
                 <button
+                  type="button"
                   onClick={() => handleEdit(viewImage)}
                   className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-footer"
                 >
@@ -855,20 +944,16 @@ const Gallery = () => {
                 </button>
 
                 <button
+                  type="button"
                   onClick={() => setViewImage(null)}
                   className="rounded-lg border border-border px-4 py-2.5 text-sm font-semibold text-body hover:bg-background"
                 >
                   Close
                 </button>
-
               </div>
-
             </div>
-
           </div>
-
         </div>
-
       )}
 
     </div>
